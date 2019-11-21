@@ -10,6 +10,15 @@ def pprint_todo(entry, now):
     final_time = datetime.fromtimestamp(blame.final_committer.time)
     print(f"{str(now - final_time)} has passed, {commiter} still has a todo at {path}:{line}")
 
+def list_all_files(repo, branch):
+    def _iterate(tr):
+        for entry in tr:
+            if entry.type == 'tree':
+                yield from _iterate(repo[entry.id])
+            elif entry.type == 'blob':
+                yield entry.name
+    return _iterate(repo.revparse_single(branch).tree)
+
 async def find_todos(repo, file_path):
     line_no = 0
     result = []
@@ -25,11 +34,9 @@ async def main():
     repo_dir = sys.argv[1]
     repo = pygit2.Repository(repo_dir)
     current_tree = repo.revparse_single("HEAD").tree
-    diff = current_tree.diff_to_tree()
     futs = set()
     now = datetime.now()
-    for patch in diff:
-        file_path = patch.delta.old_file.path
+    for file_path in list_all_files(repo, "HEAD"):
         futs.add(asyncio.ensure_future(find_todos(repo, file_path)))
     while True:
         done, tobedone = await asyncio.wait(futs, return_when=asyncio.FIRST_COMPLETED)
